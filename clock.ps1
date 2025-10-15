@@ -1,4 +1,4 @@
-#WARNING: You can run Clock. But you can't edit custom windows while running Clock.
+﻿#WARNING: You can run Clock. But you can't edit custom windows while running Clock.
 #That means close clock. Then edit custom windows. Then run clock.
 #Clock always saves a copy of CUSTOM.WINDOW to its own path before starting to tick.
 #That means if Clock breaks your CUSTOM.WINDOW, you have ONE chance to copy it back to the game directory.
@@ -35,6 +35,11 @@ Increase the interval to prevent crashes.
 This timer does not keep time, it's just how often the update fires.
 Best practice is to exit the clock before editing custom window macros.
 #>
+
+write-host sourceExists $sourceExists
+write-host sourceIsEmpty $sourceIsEmpty
+write-host destinationExists $destinationExists
+
 
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 1250  
@@ -77,8 +82,9 @@ if ($sourceIsEmpty -and $destinationExists) {
 }
 
 # If source is missing OR empty AND destination does NOT exist → write default stub to source
-elseif ((-not $sourceExists -or $sourceIsEmpty) -and -not $destinationExists) {
-    @'
+
+if ((-not $sourceExists -or $sourceIsEmpty) -and -not $destinationExists) {
+@'
 	
 Window Clock 0.0 0.0 200 100
 	Button "Edit Me" nop
@@ -131,7 +137,7 @@ function Get-GameTime {
     $elapsed = ($now - $base).TotalSeconds
     $inGameMinutes = [math]::Floor($elapsed / 1.25)
     $hour = [math]::Floor($inGameMinutes / 60)
-    $minute = $inGameMinutes % 60
+    $minute = $inGameMinutes % 60 
     return @{ Hour = $hour; Minute = $minute }
 }
 
