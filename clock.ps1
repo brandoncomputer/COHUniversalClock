@@ -215,7 +215,8 @@ function Get-GameDate {
 		}
 	}
 
-	$slotIndex = [math]::Floor(($now.Hour * 60 + $now.Minute) / 30)
+	$minutesIntoHalfDay = ($now.Hour % 12) * 60 + $now.Minute
+	$slotIndex = [math]::Floor($minutesIntoHalfDay / 30)
     if ($slotIndex -ge 24) { $slotIndex = 23 }
 
 
@@ -267,10 +268,17 @@ function Get-GameDate {
     }
 
     # Day of week calculation
+	<#
     $day = $global:currentInGameDay
     $weekdays = @("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")
     $dayOfWeekIndex = ($day - 1) % 7
     $dayOfWeek = $weekdays[$dayOfWeekIndex]
+	#>
+	
+	$day = $expectedDay
+	$realDate = [datetime]::new($now.Year, $now.Month, $day)
+	$dayOfWeek = $realDate.DayOfWeek.ToString()
+	$dayOfWeekIndex = [int]$realDate.DayOfWeek  # Sunday = 0, Monday = 1, ..., Saturday = 6
 
     return "$dayOfWeek, $($now.ToString('MMMM')) $day, $($now.ToString('yyyy'))"
 }
