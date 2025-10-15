@@ -36,11 +36,6 @@ This timer does not keep time, it's just how often the update fires.
 Best practice is to exit the clock before editing custom window macros.
 #>
 
-write-host sourceExists $sourceExists
-write-host sourceIsEmpty $sourceIsEmpty
-write-host destinationExists $destinationExists
-
-
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 1250  
 
