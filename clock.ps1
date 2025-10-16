@@ -8,7 +8,7 @@
 #If you already have a CUSTOM.WINDOW file, you need to know clock modifies lines 3, 4, 5, and 6. Populate these lines with '	Button "Edit Me" nop' before running Clock.
 
 # Source file. Edit this as needed.
-$filePath = "C:\Games\Homecoming\data\customwindows\CUSTOM.WINDOW"
+$global:filePath = "C:\Games\Homecoming\data\customwindows\CUSTOM.WINDOW"
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -16,7 +16,7 @@ Add-Type -AssemblyName System.Drawing
 # Create the form
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "City of Heroes Game Clock"
-$form.Size = New-Object System.Drawing.Size(400,100)
+$form.Size = New-Object System.Drawing.Size(450,150)
 $form.StartPosition = "CenterScreen"
 $form.TopMost = $true
 
@@ -24,9 +24,17 @@ $form.TopMost = $true
 $labelClock = New-Object System.Windows.Forms.Label
 $labelClock.Text = ""
 $labelClock.Location = New-Object System.Drawing.Point(10,10)
-$labelClock.Size = New-Object System.Drawing.Size(400,40)
+$labelClock.Size = New-Object System.Drawing.Size(450,40)
 $labelClock.Font = New-Object System.Drawing.Font("Arial",16,[System.Drawing.FontStyle]::Bold)
 $form.Controls.Add($labelClock)
+
+$checkboxPause = New-Object System.Windows.Forms.CheckBox
+$checkboxPause.Text = "Pause File Write for Custom Window Editing"
+$checkboxPause.Location = New-Object System.Drawing.Point(10, 50)
+$checkboxPause.Size = New-Object System.Drawing.Size(450, 20)
+$checkboxPause.Font = New-Object System.Drawing.Font("Arial",10,[System.Drawing.FontStyle]::Bold)
+$checkboxPause.Checked = $false
+$form.Controls.Add($checkboxPause)
 
 <# 
 Timer setup
@@ -42,7 +50,7 @@ $timer.Interval = 1250
 $directoryPath = Split-Path $filePath
 
 # Destination: clock script's directory
-$destinationPath = Join-Path $PSScriptRoot "CUSTOM.WINDOW"
+$global:destinationPath = Join-Path $PSScriptRoot "CUSTOM.WINDOW"
 
 # Ensure source directory exists
 if (-not (Test-Path $directoryPath)) {
@@ -108,6 +116,7 @@ if ((Test-Path $filePath) -and (-not $sourceIsEmpty)) {
 
 $global:lastRecordedDay = -1
 $global:currentInGameDay = -1
+$global:lastCheckboxState = $false
 
 # Format time as 12-hour with AM/PM
 function Format-Time {
@@ -292,22 +301,39 @@ function Format-RealDate {
 $global:lastGameHour = -1
 # Timer tick event
 $timer.Add_Tick({
+    # Existing logic below this line
     $gameTime = Get-GameTime
-	# Detect in-game midnight transition
-	$formattedGameDate = Get-GameDate
-	$expectedDay = $global:currentInGameDay
+    $formattedGameDate = Get-GameDate
+    $expectedDay = $global:currentInGameDay
 
-	if ($gameTime.Hour -eq 0 -and $global:lastGameHour -ne 0) {
-		$global:currentInGameDay = $expectedDay
-		$global:lastRecordedDay = $expectedDay
-	}
-	$global:lastGameHour = $gameTime.Hour
+    if ($gameTime.Hour -eq 0 -and $global:lastGameHour -ne 0) {
+        $global:currentInGameDay = $expectedDay
+        $global:lastRecordedDay = $expectedDay
+    }
+    $global:lastGameHour = $gameTime.Hour
     $formattedGameTime = Format-Time $gameTime.Hour $gameTime.Minute
 
     $realNow = Get-Date
     $formattedRealTime = Format-Time $realNow.Hour $realNow.Minute
     $formattedRealDate = Format-RealDate
-	    $labelClock.Text = " $formattedGameDate, $formattedGameTime"
+    $labelClock.Text = " $formattedGameDate, $formattedGameTime"
+	
+	# Detect transition from checked → unchecked
+	$currentCheckboxState = $checkboxPause.Checked
+	if ($global:lastCheckboxState -eq $true -and $currentCheckboxState -eq $false) {
+		# Transition occurred → backup CUSTOM.WINDOW
+		if ((Test-Path $filePath) -and ((Get-Item $filePath).Length -gt 0)) {
+			Copy-Item -Path $filePath -Destination $destinationPath -Force
+			Write-Host "Checkbox unpaused—CUSTOM.WINDOW backed up to clock directory."
+		} else {
+			Write-Host "Checkbox unpaused—but CUSTOM.WINDOW was missing or empty, no backup performed."
+		}
+	}
+	$global:lastCheckboxState = $currentCheckboxState
+	
+	if ($checkboxPause.Checked) {
+        return  # Skip update if paused
+    }
 
     if (Test-Path $filePath) {
         $lines = Get-Content $filePath
@@ -315,8 +341,8 @@ $timer.Add_Tick({
 
         $newLine3 = "`tButton `"$formattedGameDate`""
         $newLine4 = "`tButton `"$formattedGameTime`""
-		$newLine5 = "`tButton `"$formattedRealDate`""
-		$newLine6 = "`tButton `"$formattedRealTime`""
+        $newLine5 = "`tButton `"$formattedRealDate`""
+        $newLine6 = "`tButton `"$formattedRealTime`""
 
         $changed = $false
         if ($lines[2] -ne $newLine3) { $lines[2] = $newLine3; $changed = $true }
@@ -328,6 +354,7 @@ $timer.Add_Tick({
             Set-Content -Path $filePath -Value $lines
         }
     }
+	
 })
 
 # Start ticking
