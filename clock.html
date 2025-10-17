@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>City of Heroes Game Clock</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      background: #111;
+      color: #eee;
+    }
+    .clock-box {
+      font-size: 1.5em;
+      margin: 10px 0;
+    }
+    label {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>City of Heroes Game Clock</h1>
+  <div class="clock-box" id="gameDate"></div>
+  <div class="clock-box" id="gameTime"></div>
+  <div class="clock-box" id="realDate"></div>
+  <div class="clock-box" id="realTime"></div>
+
+  <script>
+    function formatTime(hour, minute) {
+      const suffix = hour >= 12 ? "PM" : "AM";
+      let displayHour = hour % 12;
+      if (displayHour === 0) displayHour = 12;
+      return `${displayHour}:${minute.toString().padStart(2, '0')} ${suffix}`;
+    }
+
+    function getGameTimeUTC() {
+      const now = new Date();
+      const base = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        now.getUTCHours(),
+        now.getUTCMinutes() >= 30 ? 30 : 0,
+        0, 0
+      ));
+      const elapsed = (now.getTime() - base.getTime()) / 1000;
+      const inGameMinutes = Math.floor(elapsed / 1.25);
+      const hour = Math.floor(inGameMinutes / 60);
+      const minute = inGameMinutes % 60;
+      return { hour, minute };
+    }
+
+    function getNthWeekdayOfMonth(year, month, weekdayIndex, n) {
+      let count = 0;
+      for (let day = 1; day <= 31; day++) {
+        const date = new Date(Date.UTC(year, month, day));
+        if (date.getUTCMonth() !== month) break;
+        if (date.getUTCDay() === weekdayIndex) {
+          count++;
+          if (count === n) return day;
+        }
+      }
+      return null;
+    }
+
+    function getLastWeekdayOfMonth(year, month, weekdayIndex) {
+      for (let day = 31; day >= 1; day--) {
+        const date = new Date(Date.UTC(year, month, day));
+        if (date.getUTCMonth() !== month) continue;
+        if (date.getUTCDay() === weekdayIndex) return day;
+      }
+      return null;
+    }
+
+    function getReservedDays(year, month) {
+      const reserved = [];
+
+      // Fixed holidays
+      const fixed = {
+        0: [1],       // Jan: New Year's Day
+        1: [14],      // Feb: Valentine's Day
+        5: [19],      // Jun: Juneteenth
+        6: [4],       // Jul: Independence Day
+        9: [31],      // Oct: Halloween
+        10: [11],     // Nov: Veterans Day
+        11: [24, 25]  // Dec: Christmas Eve & Day
+      };
+      if (fixed[month]) reserved.push(...fixed[month]);
+
+      // Floating holidays
+      if (month === 0) reserved.push(getNthWeekdayOfMonth(year, month, 1, 3)); // MLK Day
+      if (month === 1) reserved.push(getNthWeekdayOfMonth(year, month, 1, 3)); // Presidents' Day
+      if (month === 4) reserved.push(getLastWeekdayOfMonth(year, month, 1));   // Memorial Day
+      if (month === 8) reserved.push(getNthWeekdayOfMonth(year, month, 1, 1)); // Labor Day
+      if (month === 9) reserved.push(getNthWeekdayOfMonth(year, month, 1, 2)); // Columbus Day
+      if (month === 10) reserved.push(getNthWeekdayOfMonth(year, month, 4, 4)); // Thanksgiving
+
+      // Easter & Good Friday (approximate: all Sundays & Fridays in March/April)
+      if (month === 2 || month === 3) {
+        for (let day = 1; day <= 31; day++) {
+          const date = new Date(Date.UTC(year, month, day));
+          if (date.getUTCMonth() !== month) break;
+          const dow = date.getUTCDay();
+          if (dow === 0 || dow === 5) reserved.push(day);
+        }
+      }
+
+      return reserved;
+    }
+
+    function getGameDateUTC() {
+      const now = new Date();
+      const year = now.getUTCFullYear();
+      const month = now.getUTCMonth();
+      const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+      const reservedDays = getReservedDays(year, month);
+
+      const minutesIntoHalfDay = (now.getUTCHours() % 12) * 60 + now.getUTCMinutes();
+      const slotIndex = Math.floor(minutesIntoHalfDay / 30);
+
+      const evenlySpaced = Array.from({ length: 24 }, (_, i) =>
+        Math.round(1 + (i * (daysInMonth - 1) / 23))
+      );
+
+      const merged = [...new Set([...reservedDays, ...evenlySpaced])].sort((a, b) => a - b);
+
+      while (merged.length > 24) {
+        let minGap = Infinity;
+        let removeIndex = -1;
+        for (let i = 1; i < merged.length - 1; i++) {
+          const gap = merged[i + 1] - merged[i - 1];
+          if (!reservedDays.includes(merged[i]) && gap < minGap) {
+            minGap = gap;
+            removeIndex = i;
+          }
+        }
+        if (removeIndex >= 0) merged.splice(removeIndex, 1);
+        else break;
+      }
+
+      const expectedDay = merged[Math.min(slotIndex, merged.length - 1)];
+      const realDate = new Date(Date.UTC(year, month, expectedDay));
+      const dayOfWeek = realDate.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+      const monthName = realDate.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+      return `${dayOfWeek}, ${monthName} ${expectedDay}, ${year}`;
+    }
+
+    function updateClock() {
+      const gameTime = getGameTimeUTC();
+      const formattedGameTime = formatTime(gameTime.hour, gameTime.minute);
+      const formattedGameDate = getGameDateUTC();
+
+      const now = new Date();
+      const formattedRealTime = formatTime(now.getUTCHours(), now.getUTCMinutes());
+      const formattedRealDate = now.toLocaleDateString('en-US', {
+        month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC'
+      });
+
+      document.getElementById('gameDate').textContent = `📅 In-Game Date: ${formattedGameDate}`;
+      document.getElementById('gameTime').textContent = `⏰ In-Game Time: ${formattedGameTime}`;
+      document.getElementById('realDate').textContent = `📆 Real Date (UTC): ${formattedRealDate}`;
+      document.getElementById('realTime').textContent = `🕰 Real Time (UTC): ${formattedRealTime}`;
+    }
+
+    setInterval(() => {
+      updateClock();
+    }, 1250);
+
+    updateClock(); // Initial render
+  </script>
+</body>
+</html>
